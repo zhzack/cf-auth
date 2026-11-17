@@ -1,7 +1,7 @@
 import { Context, Next } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { sign, verify } from 'hono/jwt';
-import { Env, UserSession } from './types';
+import { Env, UserRole, UserSession, UserStatus } from './types';
 
 // PBKDF2 密码哈希 (利用 WebCrypto API)
 export async function hashPassword(password: string, saltHex?: string): Promise<{ hash: string; salt: string }> {
@@ -44,22 +44,34 @@ export async function verifyPassword(password: string, hash: string, salt: strin
   return result.hash === hash;
 }
 
-// 签发跨子域通用的 JWT
+// 解析允许访问的应用列表
+export function parseAllowedApps(allowedAppsStr: string | null | undefined): string[] {
+  if (!allowedAppsStr || allowedAppsStr === '*') return ['*'];
+  try {
+    const parsed = JSON.parse(allowedAppsStr);
+    return Array.isArray(parsed) ? parsed : ['*'];
+  } catch {
+    return allowedAppsStr.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+}
+
+// 签发跨子域通用的 JWT (包含角色与权限列表)
 export async function createSessionToken(user: UserSession, secret: string): Promise<string> {
   const payload = {
     sub: user.id,
     username: user.username,
     nickname: user.nickname,
+    role: user.role,
+    status: user.status,
+    apps: user.allowedApps,
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30, // 30天有效
   };
   return await sign(payload, secret, 'HS256');
 }
 
 // 获取生效的 Cookie Domain
-// 关键优化：本地开发时（如 127.0.0.1 或 localhost）返回 undefined，生产域名返回 .b1uegrey.xyz
 export function getEffectiveCookieDomain(c: Context<{ Bindings: Env }>): string | undefined {
   const host = c.req.header('host')?.split(':')[0] || '';
-  // 如果是本地IP或localhost，不指定 domain，由浏览器自动作用于当前 host
   if (host === 'localhost' || host === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(host)) {
     return undefined;
   }
@@ -70,12 +82,11 @@ export function getEffectiveCookieDomain(c: Context<{ Bindings: Env }>): string 
   return undefined;
 }
 
-// 安全验证回跳地址，防止恶意重定向
+// 安全验证回跳地址
 export function validateRedirectUrl(redirectUrl: string | undefined | null, rootDomain: string = 'b1uegrey.xyz'): string {
   if (!redirectUrl || !redirectUrl.trim()) return '/';
 
   const clean = redirectUrl.trim();
-  // 相对路径安全回跳
   if (clean.startsWith('/') && !clean.startsWith('//')) {
     return clean;
   }
@@ -83,7 +94,6 @@ export function validateRedirectUrl(redirectUrl: string | undefined | null, root
   try {
     const parsed = new URL(clean);
     const host = parsed.hostname;
-    // 允许的主机列表：b1uegrey.xyz, *.b1uegrey.xyz, localhost, 127.0.0.1
     if (
       host === rootDomain ||
       host.endsWith('.' + rootDomain) ||
@@ -97,7 +107,7 @@ export function validateRedirectUrl(redirectUrl: string | undefined | null, root
   return '/';
 }
 
-// 鉴权中间件
+// 登录认证中间件
 export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user: UserSession } }>, next: Next) {
   let token = getCookie(c, 'auth_token');
 
@@ -118,14 +128,31 @@ export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user:
       return c.json({ error: '登录凭证无效或已过期' }, 401);
     }
 
+    const status = (payload.status as UserStatus) || 'active';
+    if (status === 'disabled') {
+      return c.json({ error: '账号已被管理员禁用，请联系管理员' }, 403);
+    }
+
     c.set('user', {
       id: payload.sub as string,
       username: (payload.username as string) || '',
       nickname: (payload.nickname as string) || '',
+      role: (payload.role as UserRole) || 'user',
+      status,
+      allowedApps: Array.isArray(payload.apps) ? (payload.apps as string[]) : ['*'],
     });
 
     await next();
   } catch (err: any) {
     return c.json({ error: '登录凭证已过期，请重新登录' }, 401);
   }
+}
+
+// 超级管理员权限中间件
+export async function requireAdmin(c: Context<{ Bindings: Env; Variables: { user: UserSession } }>, next: Next) {
+  const user = c.get('user');
+  if (!user || user.role !== 'admin') {
+    return c.json({ error: '权限不足，仅超级管理员可执行此操作' }, 403);
+  }
+  await next();
 }

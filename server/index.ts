@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env, UserSession } from './types';
 import { authRouter } from './routes/auth';
+import { adminRouter } from './routes/admin';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: UserSession } }>();
 
@@ -21,6 +22,7 @@ api.get('/health', (c) => {
 });
 
 api.route('/auth', authRouter);
+api.route('/admin', adminRouter);
 
 // 挂载 /api 路由
 app.route('/api', api);

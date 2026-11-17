@@ -1,13 +1,14 @@
 import { Hono } from 'hono';
 import { setCookie, deleteCookie } from 'hono/cookie';
-import { Env, UserSession } from '../types';
+import { Env, UserRole, UserSession, UserStatus, AppItem } from '../types';
 import { 
   hashPassword, 
   verifyPassword, 
   createSessionToken, 
   requireAuth, 
   getEffectiveCookieDomain, 
-  validateRedirectUrl 
+  validateRedirectUrl,
+  parseAllowedApps
 } from '../auth';
 
 export const authRouter = new Hono<{ Bindings: Env; Variables: { user: UserSession } }>();
@@ -22,7 +23,7 @@ authRouter.get('/status', async (c) => {
   }
 });
 
-// 首次安装设置管理员账号
+// 首次安装设置超级管理员账号
 authRouter.post('/setup', async (c) => {
   const row = await c.env.DB.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
   if ((row?.count || 0) > 0) {
@@ -41,11 +42,19 @@ authRouter.post('/setup', async (c) => {
   const { hash, salt } = await hashPassword(password);
   const finalNickname = nickname?.trim() || username;
 
+  // 首个注册用户自动成为拥有全部权限的超级管理员
   await c.env.DB.prepare(
-    'INSERT INTO users (id, username, password_hash, salt, nickname) VALUES (?, ?, ?, ?, ?)'
-  ).bind(userId, username.trim(), hash, salt, finalNickname).run();
+    'INSERT INTO users (id, username, password_hash, salt, nickname, role, status, allowed_apps) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(userId, username.trim(), hash, salt, finalNickname, 'admin', 'active', '*').run();
 
-  const sessionUser: UserSession = { id: userId, username: username.trim(), nickname: finalNickname };
+  const sessionUser: UserSession = { 
+    id: userId, 
+    username: username.trim(), 
+    nickname: finalNickname,
+    role: 'admin',
+    status: 'active',
+    allowedApps: ['*'],
+  };
   const token = await createSessionToken(sessionUser, c.env.JWT_SECRET);
 
   const isHttps = c.req.url.startsWith('https');
@@ -72,14 +81,38 @@ authRouter.post('/login', async (c) => {
   }
 
   const user = await c.env.DB.prepare(
-    'SELECT id, username, password_hash, salt, nickname FROM users WHERE username = ?'
-  ).bind(username.trim()).first<{ id: string; username: string; password_hash: string; salt: string; nickname: string }>();
+    'SELECT id, username, password_hash, salt, nickname, role, status, allowed_apps FROM users WHERE username = ?'
+  ).bind(username.trim()).first<{
+    id: string;
+    username: string;
+    password_hash: string;
+    salt: string;
+    nickname: string;
+    role: string | null;
+    status: string | null;
+    allowed_apps: string | null;
+  }>();
 
   if (!user || !(await verifyPassword(password, user.password_hash, user.salt))) {
     return c.json({ error: '用户名或密码错误' }, 401);
   }
 
-  const sessionUser: UserSession = { id: user.id, username: user.username, nickname: user.nickname };
+  const status = (user.status as UserStatus) || 'active';
+  if (status === 'disabled') {
+    return c.json({ error: '该账号已被管理员禁用，请联系管理员开通' }, 403);
+  }
+
+  const role = (user.role as UserRole) || 'user';
+  const allowedApps = parseAllowedApps(user.allowed_apps);
+
+  const sessionUser: UserSession = { 
+    id: user.id, 
+    username: user.username, 
+    nickname: user.nickname,
+    role,
+    status,
+    allowedApps,
+  };
   const token = await createSessionToken(sessionUser, c.env.JWT_SECRET);
 
   const isHttps = c.req.url.startsWith('https');
@@ -102,16 +135,35 @@ authRouter.post('/login', async (c) => {
 authRouter.post('/logout', (c) => {
   const cookieDomain = getEffectiveCookieDomain(c);
   deleteCookie(c, 'auth_token', { domain: cookieDomain, path: '/' });
+  deleteCookie(c, 'auth_token', { path: '/' });
   return c.json({ success: true });
 });
 
-// 获取当前用户信息
-authRouter.get('/me', requireAuth, (c) => {
+// 获取当前用户信息及可见生态应用
+authRouter.get('/me', requireAuth, async (c) => {
   const user = c.get('user');
-  return c.json({ user });
+
+  try {
+    const { results: allApps } = await c.env.DB.prepare(
+      'SELECT id, name, description, url, icon, badge, sort_order, created_at FROM apps ORDER BY sort_order ASC, created_at ASC'
+    ).all<AppItem>();
+
+    const isAll = user.role === 'admin' || user.allowedApps.includes('*');
+    const accessibleApps = isAll
+      ? (allApps || [])
+      : (allApps || []).filter((a) => user.allowedApps.includes(a.id));
+
+    return c.json({ 
+      user, 
+      apps: accessibleApps,
+      allApps: user.role === 'admin' ? (allApps || []) : undefined 
+    });
+  } catch {
+    return c.json({ user, apps: [] });
+  }
 });
 
-// 修改密码
+// 修改密码 (个人中心自助)
 authRouter.post('/password', requireAuth, async (c) => {
   const user = c.get('user');
   const { oldPassword, newPassword } = await c.req.json();

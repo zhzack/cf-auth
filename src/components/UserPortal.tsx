@@ -1,6 +1,21 @@
-import React, { useState } from 'react';
-import { User, Lock, LogOut, ExternalLink, ShieldCheck, Sparkles, Check, Wallet, Globe } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  ShieldCheck, 
+  LayoutGrid, 
+  Users, 
+  Layers, 
+  Lock, 
+  LogOut, 
+  ExternalLink, 
+  Sparkles, 
+  Check 
+} from 'lucide-react';
 import { fetchApi } from '../api';
+import { User, AppItem } from '../types';
+import { LaunchpadTab } from './LaunchpadTab';
+import { UserManagementTab } from './UserManagementTab';
+import { AppManagementTab } from './AppManagementTab';
+import { SecurityTab } from './SecurityTab';
 
 interface Props {
   user: User;
@@ -8,176 +23,152 @@ interface Props {
 }
 
 export const UserPortal: React.FC<Props> = ({ user, onLogout }) => {
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [msg, setMsg] = useState({ text: '', isError: false });
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'launchpad' | 'users' | 'apps' | 'security'>('launchpad');
+  const [apps, setApps] = useState<AppItem[]>([]);
+  const [allApps, setAllApps] = useState<AppItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMsg({ text: '', isError: false });
-
-    if (newPassword.length < 6) {
-      setMsg({ text: '新密码不能少于 6 位', isError: true });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setMsg({ text: '两次输入的新密码不一致', isError: true });
-      return;
-    }
-
-    setLoading(true);
+  // 加载可见应用及全部应用配置
+  const loadAppData = async () => {
     try {
-      await fetchApi('/api/auth/password', {
-        method: 'POST',
-        body: JSON.stringify({ oldPassword, newPassword }),
-      });
-      setMsg({ text: '主密码修改成功！所有子系统已同步更新。', isError: false });
-      setOldPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (err: any) {
-      setMsg({ text: err.message || '修改失败', isError: true });
+      const res = await fetchApi<{ user: User; apps: AppItem[]; allApps?: AppItem[] }>('/api/auth/me');
+      setApps(res.apps || []);
+      setAllApps(res.allApps || res.apps || []);
+    } catch (err) {
+      console.error('加载生态数据失败:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    loadAppData();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await fetchApi('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    onLogout();
+  };
+
+  const isAdmin = user.role === 'admin';
+
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4 flex items-center justify-center">
-      <div className="w-full max-w-lg space-y-4">
-        {/* 用户信息卡片 */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center font-bold text-xl shadow-md shadow-indigo-200">
-              {user.nickname?.[0]?.toUpperCase() || user.username?.[0]?.toUpperCase()}
+    <div className="min-h-screen bg-slate-50/60 pb-12">
+      {/* 顶部主导航栏 */}
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/80">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          {/* Logo & 品牌名 */}
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200">
+              <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-slate-800">{user.nickname || user.username}</h1>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  全域已认证
+                <span className="font-extrabold text-sm sm:text-base text-slate-800 tracking-tight">
+                  b1uegrey 通行证
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
+                  统一认证与权限中心
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">主账号: @{user.username} · b1uegrey.xyz 通行证</p>
+              <span className="text-[10px] text-slate-400 font-mono hidden sm:block">
+                auth.b1uegrey.xyz
+              </span>
             </div>
           </div>
 
-          <button
-            onClick={onLogout}
-            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition text-xs flex items-center gap-1"
-            title="退出全域登录"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">退出</span>
-          </button>
-        </div>
-
-        {/* 快捷进入已接入的子应用 */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-3">
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <Globe className="w-4 h-4 text-indigo-500" />
-            <span>已接入的子应用 (已免密授权)</span>
-          </h2>
-
-          <div className="grid grid-cols-1 gap-2.5 pt-1">
-            <a
-              href="https://book.b1uegrey.xyz/"
-              className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/80 hover:bg-indigo-50/40 hover:border-indigo-100 flex items-center justify-between group transition"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
-                  <Wallet className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition">
-                    小记 (云端轻记账 & 持物资产)
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">https://book.b1uegrey.xyz</div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1 text-xs font-semibold text-indigo-600">
-                <span>免密进入</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </div>
-            </a>
-          </div>
-        </div>
-
-        {/* 修改全局密码 */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-3">
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <Lock className="w-4 h-4 text-slate-400" />
-            <span>修改全局密码</span>
-          </h2>
-          <p className="text-[11px] text-slate-400">修改后，所有接入 b1uegrey 通行证的子系统将同步生效。</p>
-
-          {msg.text && (
-            <div
-              className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
-                msg.isError ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-              }`}
-            >
-              {msg.isError ? '⚠️' : '✓'} {msg.text}
-            </div>
-          )}
-
-          <form onSubmit={handlePasswordChange} className="space-y-3 pt-1">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">原主密码</label>
-              <input
-                type="password"
-                required
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
+          {/* 用户信息与退出登录 */}
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex flex-col text-right">
+              <span className="text-xs font-bold text-slate-800">{user.nickname || user.username}</span>
+              <span className="text-[10px] font-medium text-slate-400">
+                {isAdmin ? '👑 超级管理员' : user.role === 'readonly' ? '只读访客' : '普通成员'}
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">新密码</label>
-                <input
-                  type="password"
-                  required
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">确认新密码</label>
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+              {user.nickname?.[0]?.toUpperCase() || user.username?.[0]?.toUpperCase()}
             </div>
 
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 active:scale-[0.99] text-white rounded-xl text-xs font-semibold transition disabled:opacity-60"
+              onClick={handleLogout}
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+              title="全域退出登录"
             >
-              {loading ? '正在更新主密码...' : '确认更新全域主密码'}
+              <LogOut className="w-4 h-4" />
             </button>
-          </form>
+          </div>
         </div>
 
-        {/* 底部全域注销按钮 */}
-        <button
-          onClick={onLogout}
-          className="w-full py-3 bg-red-50 hover:bg-red-100 active:scale-[0.99] text-red-600 text-xs font-semibold rounded-2xl flex items-center justify-center gap-2 transition"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>退出 b1uegrey 通行证登录状态</span>
-        </button>
-      </div>
+        {/* 导航 Tab 栏 */}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-1 overflow-x-auto py-1">
+          <button
+            onClick={() => setActiveTab('launchpad')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+              activeTab === 'launchpad'
+                ? 'bg-indigo-50 text-indigo-600 shadow-xs'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            应用门户
+          </button>
+
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                  activeTab === 'users'
+                    ? 'bg-indigo-50 text-indigo-600 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                用户与权限矩阵
+              </button>
+
+              <button
+                onClick={() => setActiveTab('apps')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                  activeTab === 'apps'
+                    ? 'bg-indigo-50 text-indigo-600 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                应用接入管理
+              </button>
+            </>
+          )}
+
+          <button
+            onClick={() => setActiveTab('security')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+              activeTab === 'security'
+                ? 'bg-indigo-50 text-indigo-600 shadow-xs'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Lock className="w-3.5 h-3.5" />
+            个人安全
+          </button>
+        </div>
+      </header>
+
+      {/* 页面内容区域 */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6">
+        {activeTab === 'launchpad' && <LaunchpadTab user={user} apps={apps} />}
+        {activeTab === 'users' && isAdmin && (
+          <UserManagementTab currentUser={user} allApps={allApps} />
+        )}
+        {activeTab === 'apps' && isAdmin && (
+          <AppManagementTab apps={allApps} onRefresh={loadAppData} />
+        )}
+        {activeTab === 'security' && <SecurityTab user={user} />}
+      </main>
     </div>
   );
 };
