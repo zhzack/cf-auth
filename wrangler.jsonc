@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-auth",
+  "main": "server/index.ts",
+  "compatibility_date": "2024-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cf_auth_db",
+      "database_id": "cf_auth_db_local"
+    }
+  ],
+  "vars": {
+    "JWT_SECRET": "b1uegrey_shared_sso_secret_2026_xyz",
+    "COOKIE_DOMAIN": ".b1uegrey.xyz",
+    "ROOT_DOMAIN": "b1uegrey.xyz"
+  },
+  "routes": [
+    {
+      "pattern": "auth.b1uegrey.xyz",
+      "custom_domain": true
+    }
+  ]
+}
