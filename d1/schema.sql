@@ -31,3 +31,8 @@ CREATE TABLE IF NOT EXISTS apps (
 -- 预置核心应用：记账与大件资产管理
 INSERT OR IGNORE INTO apps (id, name, description, url, icon, badge, sort_order)
 VALUES ('book', '个人记账与大件资产', '个人全维度收支与大件消费品日均成本折旧管理', 'https://book.b1uegrey.xyz', 'Wallet', '核心应用', 1);
+
+-- 预置应用：Webhook 调试网关
+INSERT OR IGNORE INTO apps (id, name, description, url, icon, badge, sort_order)
+VALUES ('webhook', 'Webhook 调试网关', '全平台 Webhook 抓包、实时检测、内网穿透与事件重放', 'https://webhook.b1uegrey.xyz', 'Zap', '开发者工具', 2);
+

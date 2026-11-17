@@ -5,7 +5,7 @@ import { AuthResponse, User } from '../types';
 
 interface Props {
   redirectUrl: string;
-  onSuccess: (user: User, redirectUrl?: string) => void;
+  onSuccess: (user: User, redirectUrl?: string, token?: string) => void;
 }
 
 export const SetupWizard: React.FC<Props> = ({ redirectUrl, onSuccess }) => {
@@ -44,7 +44,7 @@ export const SetupWizard: React.FC<Props> = ({ redirectUrl, onSuccess }) => {
           redirect: redirectUrl,
         }),
       });
-      onSuccess(data.user, data.redirectUrl);
+      onSuccess(data.user, data.redirectUrl, data.token);
     } catch (err: any) {
       setError(err.message || '初始化失败，请重试');
     } finally {

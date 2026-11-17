@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, Sparkles, Globe, Wallet, BookOpen, Layers, ShieldCheck, Database, HardDrive, Cpu } from 'lucide-react';
+import { ExternalLink, Sparkles, Globe, Wallet, BookOpen, Layers, ShieldCheck, Database, HardDrive, Cpu, Zap } from 'lucide-react';
 import { AppItem, User } from '../types';
 
 interface Props {
@@ -11,6 +11,8 @@ export const LaunchpadTab: React.FC<Props> = ({ user, apps }) => {
   // 动态匹配图标
   const renderIcon = (iconName: string) => {
     switch (iconName.toLowerCase()) {
+      case 'zap':
+        return <Zap className="w-6 h-6 text-amber-500" />;
       case 'wallet':
         return <Wallet className="w-6 h-6 text-indigo-600" />;
       case 'bookopen':

@@ -70,7 +70,7 @@ export async function createSessionToken(user: UserSession, secret: string): Pro
 }
 
 // 获取生效的 Cookie Domain
-export function getEffectiveCookieDomain(c: Context<{ Bindings: Env }>): string | undefined {
+export function getEffectiveCookieDomain(c: Context<any>): string | undefined {
   const host = c.req.header('host')?.split(':')[0] || '';
   if (host === 'localhost' || host === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(host)) {
     return undefined;

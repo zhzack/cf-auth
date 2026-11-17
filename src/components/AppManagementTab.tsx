@@ -11,6 +11,7 @@ import {
   Database, 
   HardDrive, 
   Cpu, 
+  Zap,
   X, 
   Check, 
   AlertCircle 
@@ -24,6 +25,7 @@ interface Props {
 }
 
 const AVAILABLE_ICONS = [
+  { id: 'Zap', label: '网关/触发器', icon: Zap },
   { id: 'Wallet', label: '财务/钱包', icon: Wallet },
   { id: 'BookOpen', label: '阅读/知识库', icon: BookOpen },
   { id: 'Database', label: '数据管理', icon: Database },

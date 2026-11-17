@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { setCookie, deleteCookie } from 'hono/cookie';
+import { setCookie, deleteCookie, getCookie } from 'hono/cookie';
 import { Env, UserRole, UserSession, UserStatus, AppItem } from '../types';
 import { 
   hashPassword, 
@@ -142,6 +142,13 @@ authRouter.post('/logout', (c) => {
 // 获取当前用户信息及可见生态应用
 authRouter.get('/me', requireAuth, async (c) => {
   const user = c.get('user');
+  let token = getCookie(c, 'auth_token');
+  if (!token) {
+    const authHeader = c.req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7).trim();
+    }
+  }
 
   try {
     const { results: allApps } = await c.env.DB.prepare(
@@ -155,6 +162,7 @@ authRouter.get('/me', requireAuth, async (c) => {
 
     return c.json({ 
       user, 
+      token,
       apps: accessibleApps,
       allApps: user.role === 'admin' ? (allApps || []) : undefined 
     });

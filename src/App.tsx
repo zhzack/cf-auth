@@ -31,16 +31,24 @@ export const App: React.FC = () => {
 
       // 2. 检查当前是否已登录
       try {
-        const meRes = await fetchApi<{ user: User }>('/api/auth/me');
+        const meRes = await fetchApi<{ user: User; token?: string }>('/api/auth/me');
         if (meRes.user) {
           setUser(meRes.user);
 
-          // 如果已经登录且带有 redirect 参数，自动跳转回来源业务站点
+          // 如果已经登录且带有 redirect 参数，自动跳转回来源业务站点 (附带 sso_token 兜底)
           if (redirectUrl && redirectUrl !== window.location.href) {
             setRedirecting(true);
             setTimeout(() => {
-              window.location.href = redirectUrl;
-            }, 600);
+              try {
+                const targetObj = new URL(redirectUrl, window.location.origin);
+                if (meRes.token) {
+                  targetObj.searchParams.set('sso_token', meRes.token);
+                }
+                window.location.href = targetObj.toString();
+              } catch {
+                window.location.href = redirectUrl;
+              }
+            }, 300);
             return;
           }
         }
@@ -59,11 +67,19 @@ export const App: React.FC = () => {
     initAuth();
   }, []);
 
-  const handleAuthSuccess = (authedUser: User, targetUrl?: string) => {
+  const handleAuthSuccess = (authedUser: User, targetUrl?: string, token?: string) => {
     const dest = targetUrl || redirectUrl;
     if (dest && dest !== window.location.href) {
       setRedirecting(true);
-      window.location.href = dest;
+      try {
+        const targetObj = new URL(dest, window.location.origin);
+        if (token) {
+          targetObj.searchParams.set('sso_token', token);
+        }
+        window.location.href = targetObj.toString();
+      } catch {
+        window.location.href = dest;
+      }
     } else {
       setUser(authedUser);
       setNeedSetup(false);

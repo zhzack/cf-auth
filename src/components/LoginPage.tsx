@@ -5,7 +5,7 @@ import { AuthResponse, User } from '../types';
 
 interface Props {
   redirectUrl: string;
-  onSuccess: (user: User, redirectUrl?: string) => void;
+  onSuccess: (user: User, redirectUrl?: string, token?: string) => void;
 }
 
 export const LoginPage: React.FC<Props> = ({ redirectUrl, onSuccess }) => {
@@ -42,7 +42,7 @@ export const LoginPage: React.FC<Props> = ({ redirectUrl, onSuccess }) => {
         }),
       });
       localStorage.setItem('last_sso_username', username.trim());
-      onSuccess(data.user, data.redirectUrl);
+      onSuccess(data.user, data.redirectUrl, data.token);
     } catch (err: any) {
       setError(err.message || '用户名或密码错误');
     } finally {
