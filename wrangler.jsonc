@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "cf_auth_db",
-      "database_id": "cf_auth_db_local"
+      "database_id": "793b6fe7-9ad4-47e7-848e-282681b6c5b5"
     }
   ],
   "vars": {
